@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tide Fincrime — Synthetic Identity Fraud Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #e8eaf0;
+  }
+
+  /* Scale wrapper — JS sets --scale */
+  #scale-root {
+    width: 1400px;
+    height: 860px;
+    transform-origin: top left;
+    transform: scale(var(--scale, 1));
+    position: absolute;
+    top: 0; left: 0;
+  }
+
+  .dashboard {
+    width: 1400px;
+    height: 860px;
+    display: grid;
+    grid-template-rows: 50px 108px 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    padding: 10px;
+    background: #f0f2f5;
+  }
+
+  /* ---- Header ---- */
+  .header {
+    grid-column: 1 / -1;
+    background: #0d1b2a;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .tide-logo { font-size: 18px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+  .tide-logo span { color: #3dd6f5; }
+  .header-title { font-size: 13px; color: #a0aec0; font-weight: 500; border-left: 1px solid #2d3748; padding-left: 12px; }
+  .header-right { text-align: right; }
+  .alert-badge { display: inline-block; background: #e53e3e; color: white; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .header-meta { font-size: 11px; color: #4a5568; margin-top: 3px; }
+
+  /* ---- KPI Row ---- */
+  .kpi-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .kpi-card {
+    background: white;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border-left: 4px solid transparent;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .kpi-card.danger  { border-left-color: #e53e3e; }
+  .kpi-card.warning { border-left-color: #ed8936; }
+  .kpi-card.neutral { border-left-color: #4299e1; }
+  .kpi-card.info    { border-left-color: #9f7aea; }
+
+  .kpi-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .kpi-label { font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .kpi-source { font-size: 9px; color: #a0aec0; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+  .kpi-value { font-size: 28px; font-weight: 800; color: #1a1a2e; line-height: 1; margin: 4px 0 3px; }
+  .kpi-delta { font-size: 11px; font-weight: 600; }
+  .kpi-delta.up     { color: #e53e3e; }
+  .kpi-delta.down   { color: #38a169; }
+  .kpi-delta.stable { color: #718096; }
+  .kpi-note { font-size: 9px; color: #a0aec0; margin-top: 2px; line-height: 1.3; }
+
+  /* ---- Panels ---- */
+  .panel {
+    background: white;
+    border-radius: 8px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    display: flex;
+    flex-direction: column;
+  }
+  .panel.wide { grid-column: span 2; }
+
+  .panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    gap: 8px;
+  }
+  .panel-title { font-size: 12px; font-weight: 700; color: #1a1a2e; }
+  .panel-note  { font-size: 9px; color: #718096; margin-top: 2px; line-height: 1.4; }
+
+  .panel-tag {
+    font-size: 9px; font-weight: 700; padding: 2px 7px;
+    border-radius: 10px; white-space: nowrap; flex-shrink: 0;
+  }
+  .tag-red    { background: #fff5f5; color: #c53030; }
+  .tag-blue   { background: #ebf8ff; color: #2b6cb0; }
+  .tag-purple { background: #faf5ff; color: #6b46c1; }
+  .tag-green  { background: #f0fff4; color: #276749; }
+
+  .chart-wrap { flex: 1; position: relative; min-height: 0; }
+
+  /* ---- Signal divider ---- */
+  .signal-divider {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 4px;
+  }
+  .signal-divider .line { flex: 1; height: 1px; background: currentColor; opacity: 0.25; }
+
+  /* ---- KPI Tooltip ---- */
+  .kpi-row { overflow: visible; }
+
+  .kpi-card[data-tooltip] { position: relative; cursor: default; }
+
+  .kpi-card[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(13,27,42,0.96);
+    color: #cbd5e0;
+    font-size: 10px;
+    line-height: 1.6;
+    padding: 10px 13px;
+    border-radius: 7px;
+    width: 230px;
+    white-space: normal;
+    z-index: 200;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+    pointer-events: none;
+  }
+
+  .kpi-card[data-tooltip]:hover::before {
+    content: '';
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-bottom-color: rgba(13,27,42,0.96);
+    z-index: 200;
+    pointer-events: none;
+  }
+
+  /* ---- Legend ---- */
+  .legend { display: flex; gap: 12px; margin-top: 5px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 4px; font-size: 9px; color: #718096; }
+  .legend-dot  { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .legend-dash { width: 14px; height: 2px; border-radius: 1px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div id="scale-root">
+<div class="dashboard">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="tide-logo">tide<span>.</span></div>
+      <div class="header-title">Fincrime Analytics — Synthetic Identity Fraud Investigation</div>
+    </div>
+    <div class="header-right">
+      <div><span class="alert-badge">ACTIVE INVESTIGATION</span></div>
+      <div class="header-meta">13-week window: Jan 6 – Apr 6, 2026 &nbsp;|&nbsp; Analyst view &nbsp;|&nbsp; <em>Simulated data for illustrative purposes</em></div>
+    </div>
+  </div>
+
+  <!-- KPI ROW -->
+  <div class="kpi-row">
+
+    <div class="kpi-card danger" data-tooltip="8.2% of new accounts flagged for synthetic identity suspicion — up 26% from the 13-week baseline of 6.5%. Rising rate with no detection rule change confirms real fraud escalation, not a sensitivity drift.">
+      <div class="kpi-top">
+        <div class="kpi-label">New Account Alert Rate</div>
+        <div class="kpi-source">Alert system</div>
+      </div>
+      <div class="kpi-value">8.2%</div>
+      <div class="kpi-delta up">+26% vs 13-wk baseline (6.5%)</div>
+      <div class="kpi-note">% of new accounts flagged for synthetic identity suspicion</div>
+    </div>
+
+    <div class="kpi-card warning" data-tooltip="34% of flagged accounts confirmed clean after human review — up 11pp from the 23% baseline. Rising FPR means analysts are spending capacity on legitimate accounts. This is a structural consequence of verifying identity without verifying business substance.">
+      <div class="kpi-top">
+        <div class="kpi-label">False Positive Rate</div>
+        <div class="kpi-source">Case mgmt system</div>
+      </div>
+      <div class="kpi-value">34%</div>
+      <div class="kpi-delta up">+11pp vs baseline (23%)</div>
+      <div class="kpi-note">Flagged accounts confirmed clean after human review</div>
+    </div>
+
+    <div class="kpi-card neutral" data-tooltip="847 open cases queued for AML analyst review. Median age of 6.2 days against a 3-day SLA — team is operating at 2x capacity. Backlog will not clear until the upstream verification gap is closed.">
+      <div class="kpi-top">
+        <div class="kpi-label">Review Backlog</div>
+        <div class="kpi-source">Case mgmt system</div>
+      </div>
+      <div class="kpi-value">847</div>
+      <div class="kpi-delta up">Median age: 6.2 days (SLA: 3)</div>
+      <div class="kpi-note">Open cases queued for AML analyst review</div>
+    </div>
+
+    <div class="kpi-card info" data-tooltip="18% of investigated accounts confirmed as synthetic fraud — stable vs the 19% baseline. Stable TPR with rising alert volume means more real fraud is entering the system, not just more alerts being generated.">
+      <div class="kpi-top">
+        <div class="kpi-label">True Positive Rate</div>
+        <div class="kpi-source">Case mgmt system</div>
+      </div>
+      <div class="kpi-value">18%</div>
+      <div class="kpi-delta stable">Stable vs baseline (19%)</div>
+      <div class="kpi-note">Of investigated accounts, confirmed synthetic fraud</div>
+    </div>
+
+    <div class="kpi-card danger" data-tooltip="Estimated 61% of actual synthetic fraud is being detected — declining and not actively monitored. A system can appear healthy on precision while recall silently drops. Accurate measurement requires a golden set of confirmed fraud and clean cases.">
+      <div class="kpi-top">
+        <div class="kpi-label">Detection Recall</div>
+        <div class="kpi-source">Estimated</div>
+      </div>
+      <div class="kpi-value">61%</div>
+      <div class="kpi-delta up">Declining — not actively monitored</div>
+      <div class="kpi-note">Est. % of actual synthetic fraud detected. Requires golden set to measure accurately.</div>
+    </div>
+
+  </div>
+
+  <!-- ROW 3: Trend + Funnel -->
+  <div class="panel wide">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">13-Week Alert Volume Trend</div>
+        <div class="panel-note">Alert spike began Week 10 (Mar 9). No detection rule change logged in this period — points to real fraud escalation, not sensitivity drift. Source: alert management system.</div>
+      </div>
+      <span class="panel-tag tag-red">Root Cause Signal</span>
+    </div>
+    <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dash" style="background:#e53e3e"></div> Weekly alert volume</div>
+      <div class="legend-item"><div class="legend-dash" style="background:#a0aec0; border-top:2px dashed #a0aec0; background:none; height:0; width:14px"></div> 13-wk baseline avg</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Days to Credit Application — Cohort Distribution</div>
+        <div class="panel-note">Synthetic accounts cluster heavily in the 7–14 day window. P90 of synthetic distribution (~28 days) sets the velocity gate threshold in Rec 3. Source: account creation + credit application logs.</div>
+      </div>
+      <span class="panel-tag tag-blue">Velocity Signal</span>
+    </div>
+    <div class="chart-wrap"><canvas id="velocityChart"></canvas></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#e53e3e"></div> Synthetic cohort</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4299e1"></div> Legitimate cohort</div>
+    </div>
+  </div>
+
+  <!-- ROW 4: Signal breakdown + Network -->
+  <div class="panel wide">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Fraud Signal Breakdown — Synthetic vs Legitimate Cohort</div>
+        <div class="panel-note">Signals split by data availability. Registry signals (★) require MCA/GSTIN integration. Device, IP, velocity, and bureau signals are available from existing logs and credit bureau today.</div>
+      </div>
+      <span class="panel-tag tag-purple">Signal Feasibility View</span>
+    </div>
+    <div class="chart-wrap"><canvas id="signalChart"></canvas></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(229,62,62,0.8)"></div> Synthetic (%)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(66,153,225,0.7)"></div> Legitimate (%)</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Network Cluster Map (Device + IP)</div>
+        <div class="panel-note">3 clusters identified in flagged cohort via device fingerprint + IP shared-key analysis. Cluster B (11 accts, 1 device ID) is highest-confidence ring signal. Source: device + session logs.</div>
+      </div>
+      <span class="panel-tag tag-green">Ring Detection</span>
+    </div>
+    <div class="chart-wrap"><canvas id="networkChart"></canvas></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#e53e3e"></div> Cluster A (7 accts)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ed8936"></div> Cluster B (11 accts)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#9f7aea"></div> Cluster C (5 accts)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a0aec0"></div> Isolated</div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ---- Scale to viewport ----
+function applyScale() {
+  const root = document.getElementById('scale-root');
+  const W = 1400, H = 860;
+  const scaleX = window.innerWidth / W;
+  const scaleY = window.innerHeight / H;
+  const scale = Math.min(scaleX, scaleY);
+  root.style.setProperty('--scale', scale);
+  root.style.transform = `scale(${scale})`;
+  // Center if viewport is wider than scaled dashboard
+  const scaledW = W * scale;
+  const scaledH = H * scale;
+  root.style.left = Math.max(0, (window.innerWidth - scaledW) / 2) + 'px';
+  root.style.top  = Math.max(0, (window.innerHeight - scaledH) / 2) + 'px';
+}
+applyScale();
+window.addEventListener('resize', applyScale);
+
+// ---- Trend chart ----
+const trendCtx = document.getElementById('trendChart').getContext('2d');
+const weeks = ['W1','W2','W3','W4','W5','W6','W7','W8','W9','W10','W11','W12','W13'];
+const alertVol = [198, 204, 211, 196, 208, 215, 202, 210, 218, 241, 258, 272, 264];
+const baseline = Array(13).fill(210);
+
+new Chart(trendCtx, {
+  type: 'line',
+  data: {
+    labels: weeks,
+    datasets: [
+      {
+        label: 'Alert Volume',
+        data: alertVol,
+        borderColor: '#e53e3e',
+        backgroundColor: 'rgba(229,62,62,0.07)',
+        fill: true, tension: 0.4,
+        pointRadius: alertVol.map((_,i) => i >= 9 ? 5 : 3),
+        pointBackgroundColor: alertVol.map((_,i) => i >= 9 ? '#e53e3e' : '#fc8181'),
+        borderWidth: 2.5,
+      },
+      {
+        label: 'Baseline',
+        data: baseline,
+        borderColor: '#a0aec0',
+        borderDash: [5, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 9 }, color: '#718096' } },
+      y: { grid: { color: '#f7fafc' }, ticks: { font: { size: 9 }, color: '#718096' }, suggestedMin: 160, suggestedMax: 300 }
+    }
+  }
+});
+
+// ---- Velocity distribution chart ----
+const velocityCtx = document.getElementById('velocityChart').getContext('2d');
+new Chart(velocityCtx, {
+  type: 'bar',
+  data: {
+    labels: ['< 7 days', '7–14 days', '14–28 days', '28–60 days', '60+ days'],
+    datasets: [
+      { label: 'Synthetic', data: [14, 58, 19, 7, 2], backgroundColor: 'rgba(229,62,62,0.72)', borderRadius: 3 },
+      { label: 'Legitimate', data: [2, 5, 14, 31, 48], backgroundColor: 'rgba(66,153,225,0.65)', borderRadius: 3 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.raw}%` } } },
+    scales: {
+      x: { ticks: { font: { size: 9 }, color: '#718096' }, grid: { display: false } },
+      y: { max: 70, ticks: { font: { size: 9 }, color: '#718096', callback: v => v+'%' }, grid: { color: '#f7fafc' } }
+    }
+  }
+});
+
+// ---- Signal breakdown chart ----
+// Signals grouped: first 2 require MCA, last 4 from existing logs
+const signalCtx = document.getElementById('signalChart').getContext('2d');
+const signalLabels = [
+  'No registry match (GSTIN/MCA) ★',
+  'New business (reg. < 90 days) ★',
+  'Device fingerprint shared',
+  'IP cluster match',
+  '1st txn within 24h',
+  'Bureau: thin/no-file'
+];
+const syntheticVals  = [78, 65, 52, 48, 78, 61];
+const legitimateVals = [12,  8,  3,  5, 31, 14];
+
+// Color bars differently: MCA-required = amber tint, existing = standard
+const synthColors = [
+  'rgba(217,119,6,0.75)',  // MCA
+  'rgba(217,119,6,0.75)',  // MCA
+  'rgba(229,62,62,0.72)',  // existing
+  'rgba(229,62,62,0.72)',
+  'rgba(229,62,62,0.72)',
+  'rgba(229,62,62,0.72)',
+];
+const legitColors = [
+  'rgba(252,211,77,0.6)',  // MCA
+  'rgba(252,211,77,0.6)',  // MCA
+  'rgba(66,153,225,0.6)',  // existing
+  'rgba(66,153,225,0.6)',
+  'rgba(66,153,225,0.6)',
+  'rgba(66,153,225,0.6)',
+];
+
+new Chart(signalCtx, {
+  type: 'bar',
+  data: {
+    labels: signalLabels,
+    datasets: [
+      {
+        label: 'Synthetic (%)',
+        data: syntheticVals,
+        backgroundColor: synthColors,
+        borderRadius: 3,
+      },
+      {
+        label: 'Legitimate (%)',
+        data: legitimateVals,
+        backgroundColor: legitColors,
+        borderRadius: 3,
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.raw}%` } }
+    },
+    scales: {
+      x: { ticks: { font: { size: 9 }, color: '#718096', maxRotation: 15 }, grid: { display: false } },
+      y: { max: 100, ticks: { font: { size: 9 }, color: '#718096', callback: v => v+'%' }, grid: { color: '#f7fafc' } }
+    }
+  }
+});
+
+// ---- Network scatter chart ----
+const networkCtx = document.getElementById('networkChart').getContext('2d');
+const clusterA = [{x:2.1,y:7.8},{x:2.5,y:8.2},{x:1.8,y:7.2},{x:2.9,y:8.6},{x:2.3,y:6.9},{x:1.5,y:8.0},{x:2.7,y:7.5}];
+const clusterB = [{x:7.0,y:3.1},{x:7.4,y:2.8},{x:6.7,y:3.5},{x:7.8,y:3.0},{x:6.5,y:2.5},{x:7.2,y:2.2},{x:7.6,y:3.8},{x:6.9,y:2.0},{x:8.0,y:2.6},{x:7.3,y:3.3},{x:6.3,y:3.1}];
+const clusterC = [{x:4.5,y:5.5},{x:4.9,y:4.9},{x:4.1,y:5.8},{x:5.2,y:5.1},{x:4.7,y:5.3}];
+const isolated = [{x:1.0,y:2.5},{x:9.0,y:8.0},{x:3.5,y:1.5},{x:8.5,y:6.5},{x:5.8,y:9.2},{x:0.5,y:5.5},{x:9.5,y:4.0},{x:6.5,y:8.8},{x:2.0,y:3.5},{x:8.0,y:1.5}];
+
+new Chart(networkCtx, {
+  type: 'scatter',
+  data: {
+    datasets: [
+      { label: 'Cluster A (7)',  data: clusterA, backgroundColor: 'rgba(229,62,62,0.7)',   pointRadius: 7, pointHoverRadius: 9 },
+      { label: 'Cluster B (11)', data: clusterB, backgroundColor: 'rgba(237,137,54,0.75)', pointRadius: 7, pointHoverRadius: 9 },
+      { label: 'Cluster C (5)', data: clusterC, backgroundColor: 'rgba(159,122,234,0.7)', pointRadius: 7, pointHoverRadius: 9 },
+      { label: 'Isolated',       data: isolated, backgroundColor: 'rgba(160,174,192,0.45)', pointRadius: 5, pointHoverRadius: 7 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: () => '',
+          label: (c) => {
+            const info = {
+              'Cluster A (7)':  ['Cluster A — 7 accounts', 'Signal: shared registration IP', 'Moderate ring confidence — IP sharing can occur on', 'shared networks; device confirmation pending'],
+              'Cluster B (11)': ['Cluster B — 11 accounts', 'Signal: 1 device fingerprint across all 11 accounts', 'Highest-confidence ring — a single device linked to', '11 separate business identities is not legitimate use'],
+              'Cluster C (5)':  ['Cluster C — 5 accounts', 'Signal: device + IP overlap', 'Emerging cluster — flagged for priority review'],
+              'Isolated':       ['No shared device or IP detected', 'Individual actor profile — lower ring risk']
+            };
+            return info[c.dataset.label] || [c.dataset.label];
+          }
+        },
+        backgroundColor: 'rgba(13,27,42,0.92)',
+        titleColor: '#fff',
+        bodyColor: '#a0aec0',
+        padding: 10,
+        bodySpacing: 3,
+        cornerRadius: 6,
+        displayColors: false
+      }
+    },
+    scales: {
+      x: { display: false, min: -0.5, max: 10.5 },
+      y: { display: false, min: -0.5, max: 10.5 }
+    }
+  }
+});
+</script>
+</body>
+</html>
