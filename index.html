@@ -20,8 +20,8 @@
     height: 860px;
     transform-origin: top left;
     transform: scale(var(--scale, 1));
-    position: relative;
-    margin: 0 auto;
+    position: absolute;
+    top: 0; left: 0;
   }
 
   .dashboard {
@@ -316,17 +316,17 @@
 function applyScale() {
   const root = document.getElementById('scale-root');
   const W = 1400, H = 860;
-  // Scale down only — never scale above 1 (prevents overflow on large screens)
-  const scale = Math.min(1, window.innerWidth / W);
+  const scaleX = window.innerWidth / W;
+  const scaleY = window.innerHeight / H;
+  const scale = Math.min(scaleX, scaleY);
   root.style.setProperty('--scale', scale);
   root.style.transform = `scale(${scale})`;
-  root.style.left = '';
-  root.style.top = '';
-  // Make the wrapper take up the correct height so page scrolls properly
-  root.parentElement
-    ? (root.style.marginBottom = (H * scale - H) + 'px')
-    : null;
-  document.body.style.minHeight = (H * scale + 20) + 'px';
+  // Center horizontally if viewport is wider than scaled dashboard
+  const scaledW = W * scale;
+  root.style.left = Math.max(0, (window.innerWidth - scaledW) / 2) + 'px';
+  root.style.top = '0px';
+  // Set body height to scaled content height so scroll activates only when needed
+  document.body.style.minHeight = (H * scale) + 'px';
 }
 applyScale();
 window.addEventListener('resize', applyScale);
