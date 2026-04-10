@@ -8,9 +8,9 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   html, body {
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
+    width: 100%;
+    min-height: 100vh;
+    overflow-y: auto;
     background: #e8eaf0;
   }
 
@@ -20,8 +20,8 @@
     height: 860px;
     transform-origin: top left;
     transform: scale(var(--scale, 1));
-    position: absolute;
-    top: 0; left: 0;
+    position: relative;
+    margin: 0 auto;
   }
 
   .dashboard {
@@ -316,16 +316,17 @@
 function applyScale() {
   const root = document.getElementById('scale-root');
   const W = 1400, H = 860;
-  const scaleX = window.innerWidth / W;
-  const scaleY = window.innerHeight / H;
-  const scale = Math.min(scaleX, scaleY);
+  // Scale down only — never scale above 1 (prevents overflow on large screens)
+  const scale = Math.min(1, window.innerWidth / W);
   root.style.setProperty('--scale', scale);
   root.style.transform = `scale(${scale})`;
-  // Center if viewport is wider than scaled dashboard
-  const scaledW = W * scale;
-  const scaledH = H * scale;
-  root.style.left = Math.max(0, (window.innerWidth - scaledW) / 2) + 'px';
-  root.style.top  = Math.max(0, (window.innerHeight - scaledH) / 2) + 'px';
+  root.style.left = '';
+  root.style.top = '';
+  // Make the wrapper take up the correct height so page scrolls properly
+  root.parentElement
+    ? (root.style.marginBottom = (H * scale - H) + 'px')
+    : null;
+  document.body.style.minHeight = (H * scale + 20) + 'px';
 }
 applyScale();
 window.addEventListener('resize', applyScale);
