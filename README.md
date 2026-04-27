@@ -2,6 +2,8 @@
 
 **Context:** Anonymized case study for an Indian SME neobank, 2026.
 
+**[View interactive dashboard](https://saurabhsudhir15.github.io/fincrime-case-study-dashboard/)**
+
 **Problem Statement:** Over the past 3 months, the fincrime team observed a 25% increase in suspicious activity alerts on new accounts. The review team is managing a growing backlog, false positives are rising, and legitimate SME members are experiencing unnecessary friction at onboarding. The increase is real, the operational pressure is compounding, and the gap being exploited has not yet been closed. This report diagnoses the root cause and proposes four targeted interventions.
 
 ---
